@@ -1,6 +1,6 @@
 // Written in the D programming language.
 /**
-Source: $(PHOBOSSRC std/experimental/allocator/building_blocks/_allocator_list.d)
+Source: $(PHOBOSSRC std/experimental/allocator/building_blocks/allocator_list.d)
 */
 module std.experimental.allocator.building_blocks.allocator_list;
 
@@ -304,7 +304,7 @@ struct AllocatorList(Factory, BookkeepingAllocator = GCAllocator)
         }
         if (expanded)
         {
-            import std.c.string : memcpy;
+            import core.stdc.string : memcpy;
             assert(t.length % Node.sizeof == 0);
             assert(t.ptr.alignedAt(Node.alignof));
             allocators = cast(Node[]) t;

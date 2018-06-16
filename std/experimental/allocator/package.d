@@ -69,7 +69,7 @@ to the type of the objects being allocated; they only deal in `void[]`, by
 necessity of the interface being dynamic (as opposed to type-parameterized).
 Each thread has a current allocator it uses by default, which is a thread-local
 variable $(LREF theAllocator) of type $(LREF IAllocator). The process has a
-global _allocator called $(LREF processAllocator), also of type $(LREF
+global allocator called $(LREF processAllocator), also of type $(LREF
 IAllocator). When a new thread is created, $(LREF processAllocator) is copied
 into $(LREF theAllocator). An application can change the objects to which these
 references point. By default, at application startup, $(LREF processAllocator)
@@ -82,7 +82,7 @@ $(LI A mid-level, statically-typed layer for assembling several allocators into
 one. It uses properties of the type of the objects being created to route
 allocation requests to possibly specialized allocators. This layer is relatively
 thin and implemented and documented in the $(MREF
-std,experimental,_allocator,typed) module. It allows an interested user to e.g.
+std,experimental,allocator,typed) module. It allows an interested user to e.g.
 use different allocators for arrays versus fixed-sized objects, to the end of
 better overall performance.)
 
@@ -91,27 +91,27 @@ Lego-like pieces that can be used to assemble application-specific allocators.
 The real allocation smarts are occurring at this level. This layer is of
 interest to advanced applications that want to configure their own allocators.
 A good illustration of typical uses of these building blocks is module $(MREF
-std,experimental,_allocator,showcase) which defines a collection of frequently-
+std,experimental,allocator,showcase) which defines a collection of frequently-
 used preassembled allocator objects. The implementation and documentation entry
-point is $(MREF std,experimental,_allocator,building_blocks). By design, the
+point is $(MREF std,experimental,allocator,building_blocks). By design, the
 primitives of the static interface have the same signatures as the $(LREF
 IAllocator) primitives but are for the most part optional and driven by static
 introspection. The parameterized class $(LREF CAllocatorImpl) offers an
-immediate and useful means to package a static low-level _allocator into an
+immediate and useful means to package a static low-level allocator into an
 implementation of $(LREF IAllocator).)
 
-$(LI Core _allocator objects that interface with D's garbage collected heap
-($(MREF std,experimental,_allocator,gc_allocator)), the C `malloc` family
-($(MREF std,experimental,_allocator,mallocator)), and the OS ($(MREF
-std,experimental,_allocator,mmap_allocator)). Most custom allocators would
+$(LI Core allocator objects that interface with D's garbage collected heap
+($(MREF std,experimental,allocator,gc_allocator)), the C `malloc` family
+($(MREF std,experimental,allocator,mallocator)), and the OS ($(MREF
+std,experimental,allocator,mmap_allocator)). Most custom allocators would
 ultimately obtain memory from one of these core allocators.)
 )
 
-$(H2 Idiomatic Use of `std.experimental._allocator`)
+$(H2 Idiomatic Use of `std.experimental.allocator`)
 
-As of this time, `std.experimental._allocator` is not integrated with D's
+As of this time, `std.experimental.allocator` is not integrated with D's
 built-in operators that allocate memory, such as `new`, array literals, or
-array concatenation operators. That means `std.experimental._allocator` is
+array concatenation operators. That means `std.experimental.allocator` is
 opt-in$(MDASH)applications need to make explicit use of it.
 
 For casual creation and disposal of dynamically-allocated objects, use $(LREF
@@ -133,9 +133,9 @@ void fun(size_t n)
 
 To experiment with alternative allocators, set $(LREF theAllocator) for the
 current thread. For example, consider an application that allocates many 8-byte
-objects. These are not well supported by the default _allocator, so a
-$(MREF_ALTTEXT free list _allocator,
-std,experimental,_allocator,building_blocks,free_list) would be recommended.
+objects. These are not well supported by the default allocator, so a
+$(MREF_ALTTEXT free list allocator,
+std,experimental,allocator,building_blocks,free_list) would be recommended.
 To install one in `main`, the application would use:
 
 ----
@@ -158,27 +158,27 @@ last through the application.
 
 To avoid this, long-lived objects that need to perform allocations,
 reallocations, and deallocations relatively often may want to store a reference
-to the _allocator object they use throughout their lifetime. Then, instead of
+to the allocator object they use throughout their lifetime. Then, instead of
 using `theAllocator` for internal allocation-related tasks, they'd use the
 internally held reference. For example, consider a user-defined hash table:
 
 ----
 struct HashTable
 {
-    private IAllocator _allocator;
+    private IAllocator allocator;
     this(size_t buckets, IAllocator allocator = theAllocator) {
-        this._allocator = allocator;
+        this.allocator = allocator;
         ...
     }
     // Getter and setter
-    IAllocator allocator() { return _allocator; }
-    void allocator(IAllocator a) { assert(empty); _allocator = a; }
+    IAllocator allocator() { return allocator; }
+    void allocator(IAllocator a) { assert(empty); allocator = a; }
 }
 ----
 
 Following initialization, the `HashTable` object would consistently use its
-`_allocator` object for acquiring memory. Furthermore, setting
-`HashTable._allocator` to point to a different _allocator should be legal but
+`allocator` object for acquiring memory. Furthermore, setting
+`HashTable.allocator` to point to a different allocator should be legal but
 only if the object is empty; otherwise, the object wouldn't be able to
 deallocate its existing state.
 
@@ -217,7 +217,7 @@ License: $(HTTP boost.org/LICENSE_1_0.txt, Boost License 1.0).
 
 Authors: $(HTTP erdani.com, Andrei Alexandrescu)
 
-Source: $(PHOBOSSRC std/experimental/_allocator)
+Source: $(PHOBOSSRC std/experimental/allocator)
 
 */
 
@@ -225,6 +225,18 @@ module std.experimental.allocator;
 
 public import std.experimental.allocator.common,
     std.experimental.allocator.typed;
+
+// Fix issue 17806: this should always be the first unittest in this module
+// in order to ensure that we use the `processAllocator` setter before the getter
+@system unittest
+{
+    import std.experimental.allocator.mallocator : Mallocator;
+    import std.experimental.allocator.gc_allocator : GCAllocator;
+    auto newAlloc = sharedAllocatorObject(Mallocator.instance);
+    processAllocator = newAlloc;
+    assert(processAllocator is newAlloc);
+    processAllocator = sharedAllocatorObject(GCAllocator.instance);
+}
 
 // Example in the synopsis above
 @system unittest
@@ -369,7 +381,7 @@ nothrow:
 
     For stateless allocators, this does nothing.
     */
-    @safe @nogc
+    @safe @nogc pure
     void incRef();
 
     /**
@@ -380,7 +392,7 @@ nothrow:
     Returns: `true` if the reference count is greater than `0` and `false` when
     it hits `0`. For stateless allocators, it always returns `true`.
     */
-    @safe @nogc
+    @safe @nogc pure
     bool decRef();
 }
 
@@ -405,14 +417,14 @@ struct RCIAllocator
     private IAllocator _alloc;
 
 nothrow:
-    private @nogc @safe
+    private @nogc pure @safe
     this(this _)(IAllocator alloc)
     {
         assert(alloc);
         _alloc = alloc;
     }
 
-    @nogc @safe
+    @nogc pure @safe
     this(this)
     {
         if (_alloc !is null)
@@ -421,7 +433,7 @@ nothrow:
         }
     }
 
-    @nogc @safe
+    @nogc pure @safe
     ~this()
     {
         if (_alloc !is null)
@@ -431,7 +443,7 @@ nothrow:
         }
     }
 
-    @nogc @safe
+    @nogc pure @safe
     auto ref opAssign()(typeof(this) rhs)
     {
         if (_alloc is rhs._alloc)
@@ -447,7 +459,7 @@ nothrow:
         return this;
     }
 
-    pure nothrow @safe @nogc
+    @nogc pure @safe
     bool isNull(this _)()
     {
         return _alloc is null;
@@ -712,7 +724,7 @@ nothrow:
 
     For stateless allocators, this does nothing.
     */
-    @safe @nogc
+    @safe @nogc pure
     void incRef() shared;
 
     /**
@@ -725,7 +737,7 @@ nothrow:
     Returns: `true` if the reference count is greater than `0` and `false` when
     it hits `0`. For stateless allocators, it always returns `true`.
     */
-    @safe @nogc
+    @safe @nogc pure
     bool decRef() shared;
 }
 
@@ -751,14 +763,14 @@ shared struct RCISharedAllocator
     private ISharedAllocator _alloc;
 
 nothrow:
-    private @nogc @safe
+    private @nogc pure @safe
     this(shared ISharedAllocator alloc)
     {
         assert(alloc);
         _alloc = alloc;
     }
 
-    @nogc @safe
+    @nogc pure @safe
     this(this)
     {
         if (_alloc !is null)
@@ -767,7 +779,7 @@ nothrow:
         }
     }
 
-    @nogc @safe
+    @nogc pure @safe
     ~this()
     {
         if (_alloc !is null)
@@ -777,7 +789,7 @@ nothrow:
         }
     }
 
-    @nogc @safe
+    @nogc pure @safe
     auto ref opAssign()(RCISharedAllocator rhs)
     {
         if (_alloc is rhs._alloc)
@@ -795,7 +807,7 @@ nothrow:
         return this;
     }
 
-    pure nothrow @safe @nogc
+    @nogc pure @safe
     bool isNull(this _)()
     {
         return _alloc is null;
@@ -883,7 +895,7 @@ nothrow:
 private RCISharedAllocator _processAllocator;
 private RCIAllocator _threadAllocator;
 
-nothrow @nogc @safe
+@nogc nothrow @safe
 private ref RCIAllocator setupThreadAllocator()
 {
     /*
@@ -965,11 +977,13 @@ private ref RCIAllocator setupThreadAllocator()
             return _allocator.empty();
         }
 
+        @nogc pure @safe
         override void incRef()
         {
             _allocator._alloc.incRef();
         }
 
+        @nogc pure @safe
         override bool decRef()
         {
             return _allocator._alloc.decRef();
@@ -997,7 +1011,6 @@ private ref RCIAllocator setupThreadAllocator()
     theAllocator.deallocate(buf);
 }
 
-
 /**
 Gets/sets the allocator for the current thread. This is the default allocator
 that should be used for allocating thread-local memory. For allocating memory
@@ -1005,7 +1018,7 @@ to be shared across threads, use `processAllocator` (below). By default,
 `theAllocator` ultimately fetches memory from `processAllocator`, which
 in turn uses the garbage collected heap.
 */
-nothrow @safe @nogc
+@nogc nothrow @safe
 @property ref RCIAllocator theAllocator()
 {
     alias p = _threadAllocator;
@@ -1040,7 +1053,7 @@ Gets/sets the allocator for the current process. This allocator must be used
 for allocating memory shared across threads. Objects created using this
 allocator can be cast to `shared`.
 */
-@trusted nothrow @nogc
+@nogc nothrow @trusted
 @property ref RCISharedAllocator processAllocator()
 {
     import std.experimental.allocator.gc_allocator : GCAllocator;
@@ -1052,15 +1065,15 @@ allocator can be cast to `shared`.
                 sharedAllocatorObject(GCAllocator.instance));
     }
 
-    return *(cast(RCISharedAllocator* function() nothrow @nogc)(&forceAttributes))();
+    return *(cast(RCISharedAllocator* function() @nogc nothrow)(&forceAttributes))();
 }
 
 /// Ditto
-nothrow @system @nogc
-@property void processAllocator(RCISharedAllocator a)
+@nogc nothrow @system
+@property void processAllocator(ref RCISharedAllocator a)
 {
     assert(!a.isNull);
-    _processAllocator = a;
+    processAllocator() = a;
 }
 
 @system unittest
@@ -1526,14 +1539,26 @@ exception if the copy operation throws.
 T[] makeArray(T, Allocator)(auto ref Allocator alloc, size_t length)
 {
     if (!length) return null;
+    static if (T.sizeof <= 1)
+    {
+        const nAlloc = length * T.sizeof;
+    }
+    else
+    {
+        import core.checkedint : mulu;
+        bool overflow;
+        const nAlloc = mulu(length, T.sizeof, overflow);
+        if (overflow) return null;
+    }
+
     static if (isInitAllZeroBits!T && hasMember!(T, "allocateZeroed"))
     {
-        auto m = alloc.allocateZeroed(T.sizeof * length);
+        auto m = alloc.allocateZeroed(nAlloc);
         return (() @trusted => cast(T[]) m)();
     }
     else
     {
-        auto m = alloc.allocate(T.sizeof * length);
+        auto m = alloc.allocate(nAlloc);
         if (!m.ptr) return null;
         alias U = Unqual!T;
         return () @trusted { return cast(T[]) uninitializedFillDefault(cast(U[]) m); }();
@@ -2762,11 +2787,14 @@ class CAllocatorImpl(Allocator, Flag!"indirect" indirect = No.indirect)
     {
     nothrow:
         private Allocator* pimpl;
-        @nogc
+
+        @nogc pure @safe
         ref Allocator impl()
         {
             return *pimpl;
         }
+
+        @nogc pure @safe
         this(Allocator* pa)
         {
             pimpl = pa;
@@ -2926,13 +2954,13 @@ nothrow:
         }
     }
 
-    nothrow @safe @nogc
+    @nogc nothrow pure @safe
     override void incRef()
     {
         static if (stateSize!Allocator) ++rc;
     }
 
-    nothrow @trusted @nogc
+    @nogc nothrow pure @trusted
     override bool decRef()
     {
         static if (stateSize!Allocator)
@@ -2989,11 +3017,14 @@ class CSharedAllocatorImpl(Allocator, Flag!"indirect" indirect = No.indirect)
     {
     nothrow:
         private shared Allocator* pimpl;
-        @nogc
+
+        @nogc pure @safe
         ref Allocator impl() shared
         {
             return *pimpl;
         }
+
+        @nogc pure @safe
         this(Allocator* pa) shared
         {
             pimpl = pa;
@@ -3153,13 +3184,13 @@ nothrow:
         }
     }
 
-    nothrow @safe @nogc
+    @nogc nothrow pure @safe
     override void incRef() shared
     {
         static if (stateSize!Allocator) atomicOp!"+="(rc, 1);
     }
 
-    nothrow @trusted @nogc
+    @nogc nothrow pure @trusted
     override bool decRef() shared
     {
         static if (stateSize!Allocator)
@@ -3177,9 +3208,11 @@ nothrow:
                 {
                     Allocator tmp;
                     memcpy(cast(void*) &tmp, cast(void*) &this.impl, Allocator.sizeof);
+                    Allocator empty;
+                    memcpy(cast(void*) &this.impl, cast(void*) &empty, Allocator.sizeof);
                 }
                 void[] support = (cast(void*) this)[0 .. stateSize!(typeof(this))];
-                tmp.deallocate(support);
+                (cast(bool delegate(void[]) @nogc nothrow pure)(&tmp.deallocate))(support);
                 return false;
             }
             return true;

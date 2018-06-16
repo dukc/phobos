@@ -29,7 +29,7 @@ for associative arrays; (3) friendlier behavior towards the garbage collector.
 Copyright: Copyright Andrei Alexandrescu 2007 - 2015.
 License:   $(HTTP www.boost.org/LICENSE_1_0.txt, Boost License 1.0).
 Authors:   $(HTTP erdani.org, Andrei Alexandrescu)
-Source:    $(PHOBOSSRC std/_variant.d)
+Source:    $(PHOBOSSRC std/variant.d)
 */
 module std.variant;
 
@@ -1218,7 +1218,7 @@ public:
 ///
 @system unittest
 {
-    alias Var = VariantN!(maxSize!(int, real, double));
+    alias Var = VariantN!(maxSize!(int, double, string));
 
     Var a; // Must assign before use, otherwise exception ensues
     // Initialize with an integer; make the type int

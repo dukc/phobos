@@ -1,6 +1,6 @@
 // Written in the D programming language.
 /**
-Source: $(PHOBOSSRC std/experimental/allocator/building_blocks/_region.d)
+Source: $(PHOBOSSRC std/experimental/allocator/building_blocks/region.d)
 */
 module std.experimental.allocator.building_blocks.region;
 
@@ -90,9 +90,17 @@ struct Region(ParentAllocator = NullAllocator,
     }
 
     /// Ditto
-    static if (!is(ParentAllocator == NullAllocator))
+    static if (!is(ParentAllocator == NullAllocator) && !stateSize!ParentAllocator)
     this(size_t n)
     {
+        this(cast(ubyte[]) (parent.allocate(n.roundUpToAlignment(alignment))));
+    }
+
+    /// Ditto
+    static if (!is(ParentAllocator == NullAllocator) && stateSize!ParentAllocator)
+    this(ParentAllocator parent, size_t n)
+    {
+        this.parent = parent;
         this(cast(ubyte[]) (parent.allocate(n.roundUpToAlignment(alignment))));
     }
 
@@ -704,9 +712,12 @@ version(CRuntime_Musl)
     // sbrk and brk are disabled in Musl:
     // https://git.musl-libc.org/cgit/musl/commit/?id=7a995fe706e519a4f55399776ef0df9596101f93
     // https://git.musl-libc.org/cgit/musl/commit/?id=863d628d93ea341b6a32661a1654320ce69f6a07
-} else:
-private extern(C) void* sbrk(long) nothrow @nogc;
-private extern(C) int brk(shared void*) nothrow @nogc;
+}
+else
+{
+    private extern(C) void* sbrk(long) nothrow @nogc;
+    private extern(C) int brk(shared void*) nothrow @nogc;
+}
 
 /**
 
@@ -718,6 +729,7 @@ that uncontrolled calls to `brk` and `sbrk` may affect the workings of $(D
 SbrkRegion) adversely.
 
 */
+version(CRuntime_Musl) {} else
 version(Posix) struct SbrkRegion(uint minAlign = platformAlignment)
 {
     import core.sys.posix.pthread : pthread_mutex_init, pthread_mutex_destroy,
@@ -898,6 +910,7 @@ version(Posix) struct SbrkRegion(uint minAlign = platformAlignment)
     }
 }
 
+version(CRuntime_Musl) {} else
 version(Posix) @system nothrow @nogc unittest
 {
     // Let's test the assumption that sbrk(n) returns the old address
@@ -910,6 +923,7 @@ version(Posix) @system nothrow @nogc unittest
     sbrk(-4096);
 }
 
+version(CRuntime_Musl) {} else
 version(Posix) @system nothrow @nogc unittest
 {
     import std.typecons : Ternary;
